@@ -1,0 +1,846 @@
+| \mMap and FlatMap
+
+
+  * Slide  1 - \yMap and FlatMap\s
+  * Slide  9 - Monads
+  * Slide 18 - Monad Transformers
+  * Slide 22 - Resources
+
+---
+| \gMap and FlatMap
+
+Monads are a functional pattern for composing code.
+
+This talk will help build intuition about why Monads are useful
+and give LOTS of examples of when and how to use different Monads.
+
+--
+
+
+| \bSHALL WE PLAY A GAME?
+| (Early examples from https://www.youtube.com/watch?v=7xmYgxmhx8M)
+
+--
+```
+    def g(s: String): Int = s.length
+    def f(n: Int): Int = n + 1
+
+    def h(s: String): Int = f(g(s))
+    h("hello")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--
+```
+    // ignore me -- `\cf\s` and `\ch\s` override REPLesent commands
+    import repl._
+```
+
+---
+| \gFunctor Pattern
+
+Let's modify `\cg\s` so that it might not return an answer.
+
+```
+    // non secure connections are discarded
+    def gopt(s: String): Option[Int] =
+      if (s.startsWith("https")) Some(s.length) else None
+```
+
+
+--
+Can we compose with `\cf\s: \gInt => Int\s` now?
+
+Function `\cgopt\s` emits an \gOption\s[Int] so can we just modify the input type?
+
+```
+    def fopt(on: Option[Int]): Int =
+      on match {
+        case Some(n) => f(n)
+        case None    => ???     // what goes here?!
+      }
+```
+
+
+---
+| \gFunctor Pattern
+
+We have to lift `\cf\s` into \gOption\s.
+
+```
+    // -- \cf\s: Int => Int
+    def fopt(mn: Option[Int]): Option[Int] =
+      nm match {
+        case Some(n) => Some(f(n))
+        case None    => None
+      }
+```
+
+
+--
+And same if we wanted to work with `\cf\s` in \gList\s.
+
+```
+    // -- \cf\s: Int => int
+    def fList(ln: List[Int]): List[Int] =
+      ln match {
+        case h :: ts => f(h) :: fList(ts)
+        case Nil => Nil
+      }
+```
+
+
+--
+This lifting action is the `\cmap\s` of the \gFunctor\s pattern which
+allows a plain function to work on these complex types.
+
+```
+    g:    String => Int
+    gopt: String => Option[Int]
+
+    f:    Int => Int
+    fopt: Option[Int] => Option[Int]
+
+    def hopt(s: String): Option[Int] = fopt(gopt(s))
+    def hmap(s: String): Option[Int] = gopt(s).map(f)
+```
+
+---
+\gQuick sidetrack: What is a "context"?
+
+
+We often think of an \gOption\s (or \gList\s, or \gFuture\s, etc.) as a
+container which can be manipulated with `\cmap\s` or `\cflatMap\s`.  This view is
+pretty natural in Scala when we talk about `Some(42)` or `List(1,2,3)`
+and then call the `\cmap\s` or `\cflatMap\s` methods.
+
+
+--
+Another useful way of looking at things is that \gOption\s specifies some
+context for the type it contains.  An \gInt\s is a non-decimal number but
+an \gOption\s[Int] is an \gInt\s that might not exist (and computation with
+a non-existing \gInt\s also will not exist).
+
+A \gList\s[Int] is a type of \gInt\s with superimposed values.  Consider
+
+```
+    List(1,2,3) * 7
+    List(1,2,3).map(a => a * 7)  // List(7, 14, 21)
+```
+
+A \gFuture\s[Int] is an \gInt\s that can be computed in parallel with other
+\gInt\ss.
+
+
+--
+So a Functor provides the mechanism (`\cmap\s`) for regular functions to
+work in these behavioral contexts.  (Context of \gOption\s, \gList\s, etc.)
+
+```
+   // from cats.Functor
+   trait Functor[F[_]] {
+     def map[A,B](fa: F[A])(f: A => B): F[B]
+
+     def lift[A,B](f: A => B): F[A] => F[B] =
+       (fa: F[A]) => map(fa)(f)
+   }
+```
+
+---
+| \gMonad Pattern
+
+
+| \bSHALL WE PLAY A GAME?
+
+```
+    type Deck = Int
+    type Card = Int
+
+    def addCard(c: Card, d: Deck): Deck = c + d
+
+    val oneCard  = addCard(5, 0)
+    val twoCards = addCard(4, oneCard)
+    ...
+
+    val game = addCard(1, addCard(2, addCard(3, addCard(4, addCard(5, 0)))))
+```
+
+
+--
+Let's make the game more interesting.
+
+```
+    def addCard(c: Card, d: Deck): Option[Deck] =
+      if (c + d < 10) Some(c + d)
+      else None  // you lose
+
+    val oneCard  = addCard(5, 0)  // Option[Deck]
+    val twoCards = addCard(4, oneCard)  // \rerror\s: expected Deck, found Option[Deck]
+    ...
+```
+
+
+--
+```
+    val emptyDeck: Option[Deck] = Some(0)
+
+    val game = addCard(5, emptyDeck) match {
+      case None => None
+      case Some(d1) => addCard(4, d1) match {
+        case None => None
+        case Some(d2) => addCard(3, d2) match {
+          case None => None
+          case Some(d3) => addCard(2, d3) match {
+            case None => None
+            case Some(d4) => addCard(1, d4)
+          }
+        }
+      }
+    }
+
+---
+| \gMonad Pattern
+
+Like `\cmap\s` we need to look for a new function that can adapt a function to our needs.
+It turns out we cannot make this work for plain functions but we can make it work for
+functions of the shape
+
+```
+    \cf\s: \gA => F[B]\s  // for \gMonad\s[F]
+
+    \cflatMap\s: \gF[A] => (A => F[B]) => F[B]\s
+```
+
+
+--
+A \gMonad\s instance for type \gF\s has the following pattern
+
+```
+    trait Monad[F[_]] extends Functor[F] {
+      def pure[A](a: A): F[A]
+      def flatMap[A,B](fa: F[A])(f: A => F[B]): F[B]
+
+      def flatten(ffa: F[F[A]]): FA = flatMap(ffa)(identity)
+    }
+```
+
+\yNote\s Even though Monad extends Functor we can always define `\cmap\s` in terms of
+`\cflatMap\s` and `\cpure\s`.
+
+```
+    def map[A,B](fa: F[A])(f: A => B): F[B] =
+      flatMap(fa)(a => pure(f(a)))
+```
+
+\yNote\s If we had used `\cmap\s` on the \gA => F[B]\s we would get \gF\s[F[B]].
+This can be solved with
+
+```
+    def flatten[F, A](mma: F[F[A]])(implicit M: Monad[F]): F[A] =
+      M.flatMap(mma)(identity)
+```
+
+
+---
+| \gMonad Pattern
+
+How do we use `\cflatMap\s` to build our game?
+
+```
+    type Deck = Int
+    type Card = Int
+
+    def addCard(c: Card, d: Deck): Option[Deck] =
+      if (c + d < 10) Some(c + d)
+      else None  // you lose
+
+    def addCard(c: Card): Deck => Option[Deck] = addCard(c, _)
+
+    val emptyDeck: Option[Deck] = Some(0)
+
+    val oneCard  = emptyDeck.flatMap(addCard(5))
+    val twoCards = emptyDeck.flatMap(addCard(5)).flatMap(addCard(4))
+
+    val game =
+      emptyDeck
+        .flatMap(addCard(5))
+        .flatMap(addCard(4))
+        .flatMap(addCard(3))
+        .flatMap(addCard(2))
+        .flatMap(addCard(1))
+```
+
+---
+| \mMonads
+
+
+  * Slide  1 - Map and FlatMap
+  * Slide  9 - \yMonads\s
+  * Slide 18 - Monad Transformers
+  * Slide 22 - Resources
+
+---
+| \gCommon Monad Patterns
+
+Commonly used Monads in Scala
+  * \gOption\s[A]      - types with optional values
+  * \gList\s[A]        - types with values in superposition
+  * \gFuture\s[A]      - types which can be computed in parallel
+  * \gTry\s[A]         - types which might indicate a Throwable condition
+  * \gEither\s[E,A]    - types which might indicate a priviliged (E) condition
+
+
+Commonly used Monads in Cats
+  * \gId\s[A]          - types without any context (\ytype\s \gId\s[A] = \gA\s)
+  * \gEval\s[A]        - types with values that can be evaluated now, lazily, or byname.
+  * \gReader\s[E,A]    - types parameterized by an environment (\gE => A\s)
+  * \gState\s[S,A]     - types parameterized by a modifiable state (\gS => (S,A)\s)
+  * \gWriter\s[L,A]    - types with values that carry an audit log (\g(L,A)\s)
+  * \gReaderWriterState\s[E,L,S,A] - Monads! Monads for everyone!! (an optimization)
+
+---
+| \gNotes about Monads
+
+* In Scala 2.11 you need compiler option \g-Ypartial-unification\s for these
+  examples.  In Scala 2.12+ this option is on by default.
+
+* \gOption\s and \gList\s are not very surprising so not going to talk
+  about them.
+
+
+* Do not try and start a \gFuture\s in the flatMap of another \gFuture\s
+  unless the second depends on the result of the first.  If you do they
+  will not run in parallel.
+
+
+* Reach for \gEither\s when you want an \gOption\s that gives you more
+  information about why the result does not exist.
+    o \yNote\s Import `\ccats.syntax.either._\s` to get right-biased `\cmap\s`
+      and `\cflatMap\s` for Either in 2.11 (Default in Scala 2.12+)
+    o \yNote\s Monads only accept type constructors with a single type.
+      How then can \gEither\s be constructed with two types and be a Monad?
+      The Monad is actually for instances of \gEither\s[E,?] (that is,
+      the \gE\s is fixed).  So if you are flatMapping over an
+      \gEither\s[HttpError,A] you cannot mix in other types of \gEither\ss
+      (e.g., \gEither\s[JValue,A]) without adapting the left type to
+      an \gHttpError\s.
+
+
+* Reach for \gTry\s when the priviliged condition of \gEither\s is a
+  \gThrowable\s.
+
+
+* The \gId\s Monad is a wrapper to allow plain types to have a `\cmap\s` and
+  `\cflatMap\s` so they can be used in Monad Transformers.  Similarly \gEval\s
+  wraps plain types to be evaluated now, lazily, or byname.  These are
+  used internally by Cats.
+    o \yNote\s To get a value out of an \gEval\s Monad use the `\cvalue\s`
+      method.
+
+---
+| \gReader Monad
+
+The Reader Monad is a wrapper for \gE => A\s.  The \gE\s represents
+some sort of environment used to calculate the answer.  You can use
+Reader to compose many \gE => A\s together and then supply the
+resulting composition of functions with an enviroment to act on.
+
+
+To create a Reader use the wrapper directly, supplying a function that
+accepts the environment and produces an answer.
+
+```
+    case class Reader[E,A](run: E => A) {
+      def apply(e: E): A => run(e)
+
+      def local[EE](f: EE => E): Reader[EE,A] =
+        Reader(le => run(f(le)))
+    }
+
+
+    val myReader: Reader[Config,String] = Reader(c => c.hostname)
+```
+
+
+--
+Reader also has an adapter method named `\clocal\s`.  If you have a
+\gReader\s[E,A] and some larger environment \gEE\s that contains
+an \gE\s you can use `\clocal\s` to create a \gReader\s[EE,A].
+
+```
+    val classReader: Reader[Accumulators, IndexPhaseImpl] =
+      Reader(accs => new IndexPhaseImpl(accs))
+
+    val contextReader: Reader[PipelineContext, IndexPhaseImpl] =
+      Reader.local(_.accumulators)
+```
+
+---
+| \gReader Example
+
+Engine has many Spark phase implementations.  Each is a class which
+needs a \gPipelineContext\s (a case class of service instances --
+accumulators, auditlogs, etc).
+
+```
+    type T = MasterProfileFrameworkConfig
+    type Payload[A] = (Dataset[A], T)
+```
+
+
+Each phase has an `\capply\s` method which accepts a \gPayload\s[I] and
+emits a \gPayload\s[O] (where \gI\s might in fact be \gO\s).  It was
+decided to avoid being able to update \gT\s so We introduced a Reader
+in the \gPipelinePhase\s trait to aid creating pipelines taking a
+constant \gMasterProfileFrameworkConfig\s.
+
+```
+    def reader: Reader[T, Dataset[I] => Dataset[O]] =
+      Reader(config => (ds: Dataset[I]) => apply(ds -> config))
+```
+
+
+--
+This allowed us to create pipelines with `\cfor\s`/`\cyield\s`.
+f(a)
+```
+    val pipeline =
+      for {
+        datastew <- new DataStewardshipPhaseImpl(context)
+        dvd <- new DVDReportPhaseImpl(context)
+        validate <- new ValidationPhaseImpl(context)
+        index <- new IndexPhaseImpl(context)
+        ...
+      } yield
+        dataStew
+          .andThen(dvd)
+          .andThen(validate)
+          .andThen(index)
+          ...
+
+    pipeline(frameworkConfig)
+```
+
+
+--
+Later we will talk about Monad Transformers and the use of \gReaderT\s
+to clean up the repeated use of `context` (slide 21).
+
+---
+| \gState Monad
+
+The State Monad is a wrapper for functions of shape \gS => (S, A)\s.  These
+are functions that accept some type of state, can calulate with the state,
+and also modify the state used by downsteam computations.  Once these functions
+are composed together you can supply an initial state and recover the final
+state and answer.
+
+
+To create a State Monad use the wrapper directly, supplying a function that
+accepts state and returns a possibly new state and an answer.
+
+```
+    case class State[S,A](run: S => (S,A)) {
+      def runS(s: S): S = run(s)._1
+      def runA(s: S): A = run(s)._2
+
+      def modify(f: S => S): State[S,Unit] = State(s => (f(s), ()))
+      def inspect(f: S => B): State[S,B] = State(s => (s, f(s)))
+      def get: State[S, S] = inspect(identity)
+    }
+
+
+    val myState: State[S, A] = State{ s =>
+      val answer = getAnswer(s)
+      val ns = calcNextState(s, answer)
+
+      ns -> answer
+    }
+```
+
+
+--
+State has helper functions which allow you to run the composition but only
+return the \gS\s or the \gA\s.  They are named, unimaginatively,
+`\crunS\s` and `\crunA\s`.
+
+Other useful helpers are `\cmodify\s`, `\cinspect\s`, and `\cget\s`.
+
+
+--
+\yNote\s Cats implements State using an \gEval\s Monad under the covers.
+When you use `\crun\s`, `\crunS\s`, or `\crunA\s` you will get back an
+\gEval\s.  Call its `\cvalue\s` method to get your result.
+
+---
+| \gState Example
+
+| \bSHALL WE PLAY A GAME?
+
+```
+    import cats._, data._, implicits._
+
+    val colors = Array("Red", "Green", "Blue")  // cf slide \w19\s
+
+    type GameState[A] = \gState\s[Int, A]
+
+    val addOne: GameState[String] = State{ s =>
+      val ns = s + 1
+      ns -> colors(ns % colors.length)
+    }
+
+    val addTwo: GameState[String] =
+      for {
+        _ <- addOne
+        a <- addOne
+      } yield a
+
+    val choose: GameState[String] = State.inspect(s => colors(s % colors.length))
+
+
+    val game1: GameState[String] =
+      for {
+        _ <- addOne
+        _ <- addTwo
+        _ <- addOne
+        a <- choose
+      } yield a
+
+    val game2: GameState[String] =
+      for {
+        _ <- addOne
+        _ <- addTwo
+        a <- choose
+        _ <- addOne
+      } yield a
+
+
+    val game10 = game1.run(0).value
+    val game17 = game1.run(7).value
+    val game20 = game2.run(0).value
+```
+
+---
+| \gWriter Monad
+
+Writer is a Monad that can compose operations on a type that also includes a
+log facility.  The log facility has to be a Monoid which means there is some
+
+```
+    def combine(a1: L, a2: L): L
+```
+
+for the log type.  Since \gList\s has an O(n) `\c++\s` it is highly recommended
+to use \gVector\s as the type for the log facility.
+
+
+To create a Writer use the wrapper directly, supplying a log entry and the
+answer value.
+
+```
+    case class Writer[L, A](run: (L, A)) {
+      def written: L = run._1
+      def value: A = run._2
+
+      def tell(l: L): Writer[L, A]
+    }
+
+
+    // With Writer often useful to create helpers
+    def write[A](v: A): Writer[Vector[String],A] = WriterT.liftF[Id,Vector[String],A](v)
+    def write[A](l: String, v: A): Writer[Vector[String],A] = Writer(Vector(l), v)
+    def tell(l: String): Writer[Vector[String],Unit] = Writer.tell(Vector(l))
+
+    write("hostname", "lripple-wsm")
+    write("port", 4080)
+```
+
+---
+| \gWriter Example
+
+```
+    import cats._, data._, implicits._
+
+    def write[A](l: String, v: A): Writer[Vector[String],A] = Writer(Vector(l), v)
+    def tell(l: String): Writer[Vector[String],Unit] = Writer.tell(Vector(l))
+
+    def gcd(a: Int, b: Int): Writer[Vector[String], Int] =
+      if (b == 0)
+        write(s"Finished with $a", a)
+      else
+        tell(s"$a mod $b = ${a % b}").flatMap(_ => gcd(b, a % b))
+
+    val result = gcd(36,62).run
+
+    val answer = result._2
+    val log = result._1.mkString("  ", "\n   ", "")
+```
+
+---
+| \mMonad Transformers
+
+
+  * Slide  1 - Map and FlatMap
+  * Slide  9 - Monads
+  * Slide 18 - \yMonad Transformers\s
+  * Slide 22 - Resources
+
+---
+| \g Monad Transformer Example
+
+Recall our State game (slide 15).
+
+It works by closing over `colors`.  We've seen that we can create a composition of
+functions that take an environment using a Reader Monad (\gE => A\s).  We can use
+the ReaderT Monad Transformer to construct an \gE => State[S, A]\s.
+
+--
+```
+    import cats._, data._, implicits._
+
+    type GameState[A] = \gState\s[Int, A]
+    type GameReader[A] = \gReaderT\s[GameState, Array[String], A]
+
+    // \gGameReader\s[A] wraps \gE => State[Int, A]\s
+
+    def ci(cs: Array[String], i: Int): String = cs(i % cs.length)
+
+    val addOne: GameReader[String] =
+      ReaderT { colors => State { s =>
+          val ns = s + 1
+          ns -> ci(colors, ns)
+        } }
+
+    val addTwo: GameReader[String] =
+      for {
+        _ <- addOne
+        a <- addOne
+      } yield a
+
+    val choose: GameReader[String] = ReaderT(colors => State.inspect(s => ci(colors, s)))
+
+
+    val game =
+      for {
+        _ <- addOne
+        _ <- addTwo
+        _ <- addOne
+        a <- choose
+      } yield a
+
+    val first  = game.run(Array("Red", "Blue", "Green")).run(0).value
+    val second = game.run(Array("Red", "Blue", "Green", "Cyan")).run(3).value
+```
+
+---
+| \g Monad Transformer Internals
+
+Suppose we are writing a web service that calls out to a database.  The service uses Future
+so we can handle many requests in parallel.  Our database might not have the data we are
+seeking.  We end up with a Future[Option[A]].  Can we `\cmap\s` on this?  Yes, with a bit
+of ceremony.
+
+```
+    val foa = Future.successful(Some(42))
+
+    foa.map(oa => oa.map(a => a + 1))
+```
+
+
+--
+How about `\cflatMap\s`?  Again, yes, taking care to get the shape correct.
+
+```
+    // Remember -- we need \gA => Future[B]\s where B is \gOption\s[B]
+    foa.flatMap { oa =>
+      Future.successful(
+        oa.flatMap(a => if (a < 10) Some(a + 1) else None)
+      )
+    }
+```
+
+
+--
+Something to notice here is that we never use knowledge of Future but only
+of \gFunctor\s[Future] and \gMonad\s[Future] (for `\cmap\s` or '\cflatMap\s`).  We could
+have replaced \gFuture\s with any Monad instance.
+
+```
+    case class OptionT[F[_], A](value: F[Option[A]]) {
+
+      def map(f: A => B)(implicit F: Functor[F]): OptionT[F, B] =
+        OptionT(F.map(value)(_.map(f))
+
+      def flatMap(f: A => OptionT[B])(implicit F: Monad[F]): OptionT[B] =
+        F.flatMap(value) {
+            case Some(a) => f(a)
+            case None => OptionT( F.pure(Option.empty[B]) )
+        }
+```
+
+Since Monad Transformers are also Monads we can build up several layers.
+
+
+---
+| \gMonad Transformer Patterns
+
+Monad Transformers in Cats
+  * \gOptionT\s[F,A]   - value: \gF\s[Option[A]]
+  * \gEitherT\s[F,E,A] - value: \gF\s[Either[E,A]]
+  * \gReaderT\s[F,E,A] - value: \gE => F[A]\s
+  * \gStateT\s[F,S,A]  - value: \gS => F[(S,A)]\s
+  * \gWriterT\s[F,L,A] - value: \g(L,F[A])\s
+
+
+--
+The Monad Transformers are named for how they act.  Since the F is accessed
+generically via the Functor or Monad an \gOptionT\s seems to act like an Option
+being Some or None.  \gA ReaderT\s composes to allow you to provide an environment
+which then exposes another Monad (like in our \gGameReader\s example).
+
+```
+    type MPFC = MasterProfileFrameworkConfig
+```
+
+In Engine we've used a \gReaderT\s[Reader[MPFC,?],PipelineContext,A] to remove
+the need to provide `context` during for/yield construction (slide 13).  Now a
+pipeline call is simply
+
+```
+    pipeline.run(context).run(frameworkConfig)
+```
+
+
+--
+Typelevel also has the \ycats-mtl\s library which makes it easier to work with
+nested Monad Transformers.  Here we are only talking about the basics available
+from \ycats-core\s.  If you ever end up working with a
+
+```
+    \gEitherT\s[StateT[List,Int,?], Exception, A]
+```
+
+give \ycats-mtl\s a look.
+
+
+--
+\mSee Also
+
+---
+| \gResources
+
+
+\yCats\s
+
+  Cats Core
+    * https://typelevel.org/cats/
+
+  Cats MTL
+    * https://typelevel.org/cats-mtl/
+
+\yYoutube\s
+
+  A Small (Real) Example of the Reader and Writer Monads
+    * https://underscore.io/blog/posts/2014/07/27/readerwriterstate.html
+
+  Options in Futures, how to unsuck them
+    * https://youtu.be/hGMndafDcc8
+
+\ySlide Software\s
+
+  REPLesent
+    * https://github.com/marconilanna/REPLesent
+
+---
+| \mThe End
+---
+| \gNot Really The End -- An Interesting Real-World Case
+
+Here is code that I wrote the other day.
+
+```
+    val updatedIndividualCP =                                                 // 1
+      for {                                                                   // 2
+        individualCP <- contactPointCol.individualContactPoint                // 3
+        personName <- Option(individualCP.personName).filterNot(_.isEmpty)    // 4 Ok to be None
+        pn <- nameParser.parseWithThreshold(personName).orElse {              // 5
+          accumulators.incrementAcc(ReIndexNameParseFailureAccKey)            // 6 incr AccKey on None
+          None                                                                // 7
+        }                                                                     // 8
+      } yield individualCP.copy(                                              // 9
+        salutation = pn.salutation,                                           // 10
+        firstName = pn.firstName,                                             // 11
+        lastName = pn.lastName,                                               // 12
+        middleName = pn.middleName,                                           // 13
+        secondLastName = pn.secondLastName,                                   // 14
+        nameSuffix = pn.nameSuffix                                            // 15
+      )                                                                       // 16
+                                                                              // 17
+      if (updatedIndividualCP.isEmpty)                                        // 18
+        contactPointCol                                                       // 19
+      else                                                                    // 20
+        contactPointCol.copy(individualContactPoint = updatedIndividualCP)    // 21
+```
+
+---
+| \gAn Interesting Case
+
+Using a Monad Transformer we can remove the random I/O in the middle of our
+calculation.
+
+```
+    // Needs Scala 2.12+ or a hand-crafted \gMonad\s[Either[E,?]] for Scala 2.11
+
+    import cats._, data._, implicits._
+    import com.salesforce.cre.maus.syntax.thrush._    // a |> f == f(a)
+
+    type MpakEither[A] = \gEither\s[MasterProfileAccKey, A]
+    type OptT[A] = \gOptionT\s[MpakEither, A]
+
+    // \gOptT\s[A] wraps \gEither\s[MasterProfileAccKey, Option[A]]
+
+    val updatedIndividualCP: OptT[IndividualContactPoint] =
+      for {
+        individualCP <- contactPoint.individualContactPoint |> OptionT.fromOption
+        personName <- (individualCP.personName |> OptionT.pure)
+                        .filterNot(_.isEmpty)
+        pn <- (NameParser.parseWithThreashold(personName) |> OptionT.fromOption)
+                .foldF(Left(ReIndexNameParseFailureAccKey))(a => Right(Some(a)))
+      } yield individualCP.copy(
+          salutation = pn.salutation
+          firstName = pn.firstName
+          lastName = pn.lastName
+          middleName = pn.middleName
+          secondLastName = pn.secondLastName
+          nameSuffix = pn.nameSuffix
+      )
+
+      updatedIndividualCP.fold(contactPointCol){ updated =>
+        contactPointCol.copy(individualContactPoint = updated)
+      }
+        .valueOr { key =>
+          accumulators.incrementAcc(key)
+          contactPointCol
+        }
+```
+
+
+--
+The win here is removing the I/O call to `accumulators` from inside our computation
+of `updateIndividualCP`.  Working with the plain data result we can increment on
+`accumulators` or continue transforming as desired.
+
+---
+| \mReally The End
