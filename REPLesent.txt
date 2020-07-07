@@ -158,6 +158,10 @@ work in these behavioral contexts.  (Context of \gOption\s, \gList\s, etc.)
    }
 ```
 
+
+\yNote\s I learned the word "context" for this concept.  Others use the term
+"effect".  (E.g., Functional programming with effects)
+
 ---
 | \gMonad Pattern
 
@@ -747,6 +751,9 @@ give \ycats-mtl\s a look.
     * https://typelevel.org/cats-mtl/
 
 \yYoutube\s
+
+  Functional Programming with Effects
+    * https://youtu.be/po3wmq4S15A
 
   A Small (Real) Example of the Reader and Writer Monads
     * https://underscore.io/blog/posts/2014/07/27/readerwriterstate.html
