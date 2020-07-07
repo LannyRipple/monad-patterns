@@ -494,7 +494,7 @@ When you use `\crun\s`, `\crunS\s`, or `\crunA\s` you will get back an
 
     val colors = Array("Red", "Green", "Blue")  // cf slide \w19\s
 
-    type GameState[A] = \gState\s[Int, A]
+    type GameState[A] = State[Int, A]
 
     val addOne: GameState[String] = State{ s =>
       val ns = s + 1
@@ -610,8 +610,8 @@ the ReaderT Monad Transformer to construct an \gE => State[S, A]\s.
 ```
     import cats._, data._, implicits._
 
-    type GameState[A] = \gState\s[Int, A]
-    type GameReader[A] = \gReaderT\s[GameState, Array[String], A]
+    type GameState[A]  = State[Int, A]
+    type GameReader[A] = ReaderT[GameState, Array[String], A]
 
     // \gGameReader\s[A] wraps \gE => State[Int, A]\s
 
@@ -724,19 +724,15 @@ pipeline call is simply
 
 
 --
-Typelevel also has the \ycats-mtl\s library which makes it easier to work with
-nested Monad Transformers.  Here we are only talking about the basics available
-from \ycats-core\s.  If you ever end up working with a
+Typelevel also has a Monad Transformer Library called \ycats-mtl\s which makes
+it easier to work with nested Monad Transformers.  These slides are only talking
+about the basics available from \ycats-core\s.  If you ever end up working with a
 
 ```
-    \gEitherT\s[StateT[List,Int,?], Exception, A]
+    \gOptionT\s[EitherT[StateT[List,Int,?],Exception,?],A]
 ```
 
 give \ycats-mtl\s a look.
-
-
---
-\mSee Also
 
 ---
 | \gResources
@@ -800,6 +796,7 @@ Here is code that I wrote the other day.
 Using a Monad Transformer we can remove the random I/O in the middle of our
 calculation.
 
+
 ```
     // Needs Scala 2.12+ or a hand-crafted \gMonad\s[Either[E,?]] for Scala 2.11
 
@@ -837,7 +834,6 @@ calculation.
 ```
 
 
---
 The win here is removing the I/O call to `accumulators` from inside our computation
 of `updateIndividualCP`.  Working with the plain data result we can increment on
 `accumulators` or continue transforming as desired.
