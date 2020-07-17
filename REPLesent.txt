@@ -577,10 +577,12 @@ answer value.
 ```
     import cats._, data._, implicits._
 
-    def write[A](l: String, v: A): Writer[Vector[String],A] = Writer(Vector(l), v)
-    def tell(l: String): Writer[Vector[String],Unit] = Writer.tell(Vector(l))
+    type Logged[A] = Writer[Vector[String], A]
 
-    def gcd(a: Int, b: Int): Writer[Vector[String], Int] =
+    def write[A](l: String, v: A): Logged[A] = Writer(Vector(l), v)
+    def tell(l: String): Logged[Unit] = Writer.tell(Vector(l))
+
+    def gcd(a: Int, b: Int): Logged[Int] =
       if (b == 0)
         write(s"Finished with $a", a)
       else
