@@ -619,7 +619,7 @@ the ReaderT Monad Transformer to construct an \gE => State[S, A]\s.
     type GameState[A]  = State[Int, A]
     type GameReader[A] = ReaderT[GameState, Array[String], A]
 
-    // \gGameReader\s[A] wraps \gE => State[Int, A]\s
+    // \gGameReader\s[A] wraps \gArray[String] => State[Int, A]\s
 
     def ci(cs: Array[String], i: Int): String = cs(i % cs.length)
 
