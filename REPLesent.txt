@@ -547,7 +547,7 @@ log facility.  The log facility has to be a Monoid which means there is some
 ```
 
 for the log type.  Since \gList\s has an O(n) `\c++\s` it is highly recommended
-to use \gVector\s as the type for the log facility.
+to use \gVector\s or \gChain\s (from \ycats-core\s) as the type for the log facility.
 
 
 To create a Writer use the wrapper directly, supplying a log entry and the
