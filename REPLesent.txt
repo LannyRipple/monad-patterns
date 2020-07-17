@@ -374,6 +374,7 @@ accepts the environment and produces an answer.
     }
 
 
+    // Reader { env => ...; answer }
     val myReader: Reader[Config,String] = Reader(c => c.hostname)
 ```
 
@@ -466,6 +467,7 @@ accepts state and returns a possibly new state and an answer.
     }
 
 
+    // State { s => ...; new_s -> answer }
     val myState: State[S, A] = State{ s =>
       val answer = getAnswer(s)
       val ns = calcNextState(s, answer)
@@ -554,11 +556,8 @@ To create a Writer use the wrapper directly, supplying a log entry and the
 answer value.
 
 ```
-    case class Writer[L, A](run: (L, A)) {
-      def written: L = run._1
-      def value: A = run._2
-
-      def tell(l: L): Writer[L, A]
+    case class Writer[L: Monoid, A](written: L, value: A) {
+      def tell(l: L): Writer[L, Unit]
     }
 
 
@@ -567,6 +566,7 @@ answer value.
     def write[A](l: String, v: A): Writer[Vector[String],A] = Writer(Vector(l), v)
     def tell(l: String): Writer[Vector[String],Unit] = Writer.tell(Vector(l))
 
+    // Writer(log_entries, answer)
     write("hostname", "lripple-wsm")
     write("port", 4080)
 ```
