@@ -1,5 +1,7 @@
 #!/bin/bash
 
+replesent_path=$HOME/ip/REPLesent
+
 CLASSPATH=\
 $HOME/.m2/repository/org/typelevel/cats-core_2.11/1.3.1/cats-core_2.11-1.3.1.jar:\
 $HOME/.m2/repository/org/typelevel/cats-kernel_2.11/1.3.1/cats-kernel_2.11-1.3.1.jar
@@ -9,4 +11,4 @@ exec scala -cp $CLASSPATH \
     -nowarn \
     -Ypartial-unification \
     -language:_ \
-    -i ~/ip/REPLesent/REPLesent.scala bin/slides.rc
+    -i $replesent_path/REPLesent.scala bin/slides.rc
