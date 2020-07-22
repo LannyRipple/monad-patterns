@@ -423,10 +423,10 @@ f(a)
 ```
     val pipeline =
       for {
-        datastew <- new DataStewardshipPhaseImpl(context)
-        dvd <- new DVDReportPhaseImpl(context)
-        validate <- new ValidationPhaseImpl(context)
-        index <- new IndexPhaseImpl(context)
+        datastew <- new DataStewardshipPhaseImpl(context).reader
+        dvd <- new DVDReportPhaseImpl(context).reader
+        validate <- new ValidationPhaseImpl(context).reader
+        index <- new IndexPhaseImpl(context).reader
         ...
       } yield
         dataStew
